@@ -8,8 +8,12 @@ on:
 env:
   REGISTRY: hub.docker.com
   IMAGE_NAME: jasonvip888/open-prompt-studio
-  # 使用内置替换和切片功能
-  SAFE_REF_NAME: ${{ github.ref_name == 'refs/heads/master' && 'master' || github.ref_name == 'refs/heads/main' && 'main' || github.ref_name == 'refs/tags/v*.*.*' && github.ref_name[10:] || github.ref_name  }}
+  # 组合多个表达式一次性处理生成 SAFE_REF_NAME
+  SAFE_REF_NAME: ${{ 
+    (startsWith(github.ref_name, 'refs/heads/') && slice(github.ref_name, 11)) ||
+    (startsWith(github.ref_name, 'refs/tags/') && slice(github.ref_name, 10)) ||
+    github.ref_name 
+  }}
   SAFE_REF_NAME: ${{ replace(replace(env.SAFE_REF_NAME, '/', '-'), ':', '-') }}
   SAFE_REF_NAME: ${{ slice(env.SAFE_REF_NAME, 0, 30) }}
 
