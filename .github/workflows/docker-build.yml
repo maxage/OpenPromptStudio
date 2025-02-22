@@ -8,14 +8,6 @@ on:
 env:
   REGISTRY: hub.docker.com
   IMAGE_NAME: jasonvip888/open-prompt-studio
-  # 修正 SAFE_REF_NAME 生成方式
-  SAFE_REF_NAME: ${{ 
-    (startsWith(github.ref_name, 'refs/heads/') && slice(github.ref_name, 11)) ||
-    (startsWith(github.ref_name, 'refs/tags/') && slice(github.ref_name, 10)) ||
-    github.ref_name 
-  }}
-  SAFE_REF_NAME: ${{ replace(replace(env.SAFE_REF_NAME, '/', '-'), ':', '-') }}
-  SAFE_REF_NAME: ${{ slice(env.SAFE_REF_NAME, 0, 30) }}
 
 jobs:
   build-push:
@@ -28,6 +20,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Process ref name
+        id: process_ref
+        run: |
+          SAFE_REF=$(echo "${{ github.ref_name}}" | tr '/' '-' | cut -c1-30 | tr '[:upper:]' '[:lower:]')
+          echo "safe_ref=$SAFE_REF" >> $GITHUB_OUTPUT
+
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -35,19 +33,6 @@ jobs:
           driver-opts: |
             image=moby/buildkit:v0.12.4
             network=host
-
-      - name: Validate tags  # 新增验证步骤
-        run: |
-          echo "Generated tags:"
-          echo "${{ env.IMAGE_NAME }}:latest"
-          echo "${{ env.IMAGE_NAME }}:${{ env.SAFE_REF_NAME }}"
-          echo "${{ env.IMAGE_NAME }}:${{ github.sha }}"
-
-          # 验证标签格式
-          if [[ ! "${{ env.SAFE_REF_NAME }}" =~ ^[a-z0-9][a-z0-9_.-]{0,127}$ ]]; then
-            echo "::error::Invalid tag format: ${{ env.SAFE_REF_NAME }}"
-            exit 1
-          fi
 
       - name: Build and Push
         uses: docker/build-push-action@v5
@@ -58,9 +43,14 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ env.SAFE_REF_NAME }}
+            ${{ env.IMAGE_NAME }}:${{ steps.process_ref.outputs.safe_ref }}
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             NPM_REGISTRY=http://registry.npmmirror.com
+          shm-size: "512m"  # 正确的参数位置
+
+      - name: Post-cleanup
+        run: |
+          docker buildx prune -f
