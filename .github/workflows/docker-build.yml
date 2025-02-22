@@ -8,7 +8,6 @@ on:
 env:
   REGISTRY: hub.docker.com
   IMAGE_NAME: jasonvip888/open-prompt-studio
-  BUILDKIT_PARALLEL: "4"  # 通过环境变量控制并行度
 
 jobs:
   build-push:
@@ -26,7 +25,7 @@ jobs:
         with:
           driver: docker-container
           driver-opts: |
-            image=moby/buildkit:latest
+            image=moby/buildkit:v0.12.4  # 确认存在的版本
             network=host
 
       - name: Cache Optimization
@@ -47,13 +46,12 @@ jobs:
 
       - name: Build and Push
         uses: docker/build-push-action@v5
-        env:
-          BUILDKITD_FLAGS: --debug
         with:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64
           push: true
+          shm-size: "1g"  # 正确的位置指定共享内存
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
@@ -62,10 +60,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             NPM_REGISTRY=http://registry.npmmirror.com
-          extra: |
-            --shm-size=1g
 
       - name: Post-cleanup
         run: |
-          docker buildx rm || true
-          docker system prune -af
+          docker buildx prune -f
