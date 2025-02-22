@@ -21,6 +21,10 @@ jobs:
         with:
           driver: docker-container
           install: true
+          driver-opt: image=moby/buildkit:master  # 使用最新构建工具
+          buildkitd-config: |
+            [worker.oci]
+              max-parallelism = 4
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -33,8 +37,7 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          platforms: linux/amd64  # 明确指定平台
-          builder: builder        # 使用自定义构建器
+          platforms: linux/amd64
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/openpromptstudio:latest
