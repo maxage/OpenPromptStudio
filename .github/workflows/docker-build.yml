@@ -8,7 +8,14 @@ on:
 env:
   REGISTRY: hub.docker.com
   IMAGE_NAME: jasonvip888/open-prompt-studio
-  BUILDKIT_PARALLEL: "4"  # 通过环境变量控制并行度
+  # 修正 SAFE_REF_NAME 生成方式
+  SAFE_REF_NAME: ${{ 
+    (startsWith(github.ref_name, 'refs/heads/') && slice(github.ref_name, 11)) ||
+    (startsWith(github.ref_name, 'refs/tags/') && slice(github.ref_name, 10)) ||
+    github.ref_name 
+  }}
+  SAFE_REF_NAME: ${{ replace(replace(env.SAFE_REF_NAME, '/', '-'), ':', '-') }}
+  SAFE_REF_NAME: ${{ slice(env.SAFE_REF_NAME, 0, 30) }}
 
 jobs:
   build-push:
@@ -26,27 +33,24 @@ jobs:
         with:
           driver: docker-container
           driver-opts: |
-            image=moby/buildkit:latest
+            image=moby/buildkit:v0.12.4
             network=host
-      - name: Cache Optimization
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.npm
-            ~/.cache/buildx
-          key: ${{ runner.os }}-docker-${{ hashFiles('docker/Dockerfile') }}-${{ hashFiles('package*.json') }}
-          restore-keys: |
-            ${{ runner.os }}-docker-
-      - name: Docker Hub Login
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Validate tags  # 新增验证步骤
+        run: |
+          echo "Generated tags:"
+          echo "${{ env.IMAGE_NAME }}:latest"
+          echo "${{ env.IMAGE_NAME }}:${{ env.SAFE_REF_NAME }}"
+          echo "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+
+          # 验证标签格式
+          if [[ ! "${{ env.SAFE_REF_NAME }}" =~ ^[a-z0-9][a-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid tag format: ${{ env.SAFE_REF_NAME }}"
+            exit 1
+          fi
 
       - name: Build and Push
         uses: docker/build-push-action@v5
-        env:
-          BUILDKITD_FLAGS: --debug
         with:
           context: .
           file: docker/Dockerfile
@@ -54,15 +58,9 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:${{ env.SAFE_REF_NAME }}
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
             NPM_REGISTRY=http://registry.npmmirror.com
-          extra: |
-            --shm-size=1g
-      - name: Post-cleanup
-        run: |
-          docker buildx rm || true
-          docker system prune -af
