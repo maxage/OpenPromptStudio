@@ -2,9 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ "main" ]  # 触发分支
-  pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]  # 触发分支为 master
 
 jobs:
   build:
@@ -19,9 +17,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker/
+          context: ./docker  # Dockerfile 所在目录
+          file: ./docker/Dockerfile  # Dockerfile 路径
           push: true
-          tags: jasonvip888/open-prompt-studio:latest
+          tags: |
+            jasonvip888/open-prompt-studio:latest
+            jasonvip888/open-prompt-studio:${{ github.sha }}  # 使用提交哈希作为标签
